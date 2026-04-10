@@ -41,7 +41,7 @@ pr:
 # of your VMSS agent pool shown in:
 #   Azure DevOps → Project Settings → Agent pools
 pool:
-  name: 'YOUR-AGENT-POOL-NAME'
+  name: 'sh-tf-agent-pool'
 
 # ── VARIABLES ────────────────────────────────────────────────
 # Values you want to reuse throughout the pipeline.
@@ -105,7 +105,7 @@ stages:
               provider: 'azurerm'
               command: 'init'
               workingDirectory: '$(TF_WORKING_DIR)'
-              backendServiceArm: 'YOUR-SERVICE-CONNECTION-NAME'
+              backendServiceArm: 'bicep-deployment-test-access'
               backendAzureRmResourceGroupName: 'tf-backend-rg'
               backendAzureRmStorageAccountName: 'tfstatedemo8754952'
               backendAzureRmContainerName: 'tfstate'
@@ -139,7 +139,7 @@ stages:
               command: 'plan'
               workingDirectory: '$(TF_WORKING_DIR)'
               commandOptions: '-out=$(TF_WORKING_DIR)/tfplan'
-              environmentServiceNameAzureRM: 'YOUR-SERVICE-CONNECTION-NAME'
+              environmentServiceNameAzureRM: 'bicep-deployment-test-access'
 
           # ── STEP 5: Publish plan file as artifact ───────────────────
           # Each stage runs on a separate agent machine. Files on machine A
@@ -227,7 +227,7 @@ stages:
                     provider: 'azurerm'
                     command: 'init'
                     workingDirectory: '$(System.DefaultWorkingDirectory)'
-                    backendServiceArm: 'YOUR-SERVICE-CONNECTION-NAME'
+                    backendServiceArm: 'bicep-deployment-test-access'
                     backendAzureRmResourceGroupName: 'tf-backend-rg'
                     backendAzureRmStorageAccountName: 'tfstatedemo8754952'
                     backendAzureRmContainerName: 'tfstate'
@@ -246,4 +246,4 @@ stages:
                     command: 'apply'
                     workingDirectory: '$(System.DefaultWorkingDirectory)'
                     commandOptions: '$(System.DefaultWorkingDirectory)/tfplan'
-                    environmentServiceNameAzureRM: 'YOUR-SERVICE-CONNECTION-NAME'
+                    environmentServiceNameAzureRM: 'bicep-deployment-test-access'
