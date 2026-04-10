@@ -79,7 +79,15 @@ stages:
 
         steps:
 
-          # ── STEP 1: Install Terraform ───────────────────────────────
+          # ── STEP 1: Install unzip ────────────────────────────────────
+          # The TerraformInstaller task downloads Terraform as a .zip file
+          # and calls the OS 'unzip' command to extract it.
+          # VMSS Ubuntu agents don't have unzip pre-installed, so we install
+          # it first. 'apt-get install -y' means non-interactive (no prompts).
+          - script: sudo apt-get install -y unzip
+            displayName: 'Install unzip'
+
+          # ── STEP 2: Install Terraform ───────────────────────────────
           # VMSS agents are clean VMs — Terraform is not pre-installed.
           # This task downloads and installs the Terraform binary first.
           #
@@ -206,7 +214,12 @@ stages:
                 # We need the .tf files on this agent, so checkout manually.
                 - checkout: self
 
-                # ── STEP 2: Install Terraform ─────────────────────────
+                # ── STEP 2: Install unzip ────────────────────────────
+                # Same reason as Plan stage — unzip is required by TerraformInstaller.
+                - script: sudo apt-get install -y unzip
+                  displayName: 'Install unzip'
+
+                # ── STEP 3: Install Terraform ─────────────────────────
                 # Fresh machine again — install Terraform before any commands.
                 - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
                   displayName: 'Install Terraform'
