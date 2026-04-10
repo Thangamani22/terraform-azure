@@ -82,7 +82,12 @@ stages:
           # ── STEP 1: Install Terraform ───────────────────────────────
           # VMSS agents are clean VMs — Terraform is not pre-installed.
           # This task downloads and installs the Terraform binary first.
-          - task: TerraformInstaller@1
+          #
+          # WHY the long name: two Terraform extensions are installed in this org
+          # (JasonBJohnson and ms-devlabs), both provide TerraformInstaller.
+          # The fully qualified name selects the ms-devlabs one explicitly,
+          # matching TerraformTaskV4 which also comes from ms-devlabs.
+          - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
             displayName: 'Install Terraform'
             inputs:
               terraformVersion: 'latest'   # Tip: pin to '1.x.x' for stability
@@ -203,7 +208,7 @@ stages:
 
                 # ── STEP 2: Install Terraform ─────────────────────────
                 # Fresh machine again — install Terraform before any commands.
-                - task: TerraformInstaller@1
+                - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
                   displayName: 'Install Terraform'
                   inputs:
                     terraformVersion: 'latest'
