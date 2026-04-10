@@ -1,0 +1,249 @@
+# ============================================================
+# HOW TO READ THIS FILE
+# ============================================================
+# Indentation = hierarchy. 2 spaces per level. Never use tabs.
+# Lines starting with # are comments (ignored by ADO).
+# $(VariableName) = ADO built-in or user-defined variable reference.
+# A dash "-" means "this is one item in a list".
+#
+# BEFORE RUNNING: Replace every 'YOUR-...' placeholder below.
+# ============================================================
+#
+# PLACEHOLDER REFERENCE:
+#   YOUR-AGENT-POOL-NAME        → Azure DevOps → Project Settings → Agent pools
+#   YOUR-SERVICE-CONNECTION-NAME → Azure DevOps → Project Settings → Service connections
+#   production (environment)    → Azure DevOps → Pipelines → Environments → New
+#                                  Then add an Approvals check to it.
+
+# ── TRIGGER ──────────────────────────────────────────────────
+# When to auto-run this pipeline.
+# Here: whenever someone pushes a commit to the "main" branch.
+trigger:
+  branches:
+    include:
+      - main
+
+# ── PR TRIGGER ───────────────────────────────────────────────
+# Also auto-runs when a Pull Request targets "main".
+# On a PR, the Apply stage will be SKIPPED (see condition below).
+# This is a safety check: reviewers can see the plan before merge.
+pr:
+  branches:
+    include:
+      - main
+
+# ── POOL ─────────────────────────────────────────────────────
+# Which agent machines to run jobs on.
+# Defining it here at the top means ALL stages/jobs inherit it.
+# Individual jobs can override this if needed.
+#
+# ACTION REQUIRED: Replace 'YOUR-AGENT-POOL-NAME' with the name
+# of your VMSS agent pool shown in:
+#   Azure DevOps → Project Settings → Agent pools
+pool:
+  name: 'YOUR-AGENT-POOL-NAME'
+
+# ── VARIABLES ────────────────────────────────────────────────
+# Values you want to reuse throughout the pipeline.
+# TF_WORKING_DIR uses $(System.DefaultWorkingDirectory) — a
+# built-in ADO variable that resolves to the folder where your
+# repo is checked out on the agent. You don't define it; ADO sets it.
+variables:
+  - name: TF_WORKING_DIR
+    value: '$(System.DefaultWorkingDirectory)'
+
+# NOTE ON AUTHENTICATION:
+# Since your service connection uses Managed Identity, you do NOT
+# need ARM_CLIENT_SECRET or a variable group with secrets.
+# The TerraformTask reads your service connection and gets a token
+# from the VMSS managed identity automatically.
+
+# ════════════════════════════════════════════════════════════
+# STAGES
+# The pipeline has two stages: Plan and Apply.
+# They run sequentially. Apply waits for Plan to succeed.
+# ════════════════════════════════════════════════════════════
+stages:
+
+# ── STAGE 1: PLAN ────────────────────────────────────────────
+# Purpose : Validate code + preview what changes would be made.
+# Safety  : Only reads from Azure. Nothing is created or modified.
+# Runs on : Every push to main AND every PR.
+  - stage: Plan
+    displayName: 'Terraform Plan'
+    jobs:
+
+      # Regular "job" (not "deployment") — no approval gate needed here.
+      - job: TerraformPlan
+        displayName: 'Init + Validate + Plan'
+
+        steps:
+
+          # ── STEP 1: Install Terraform ───────────────────────────────
+          # VMSS agents are clean VMs — Terraform is not pre-installed.
+          # This task downloads and installs the Terraform binary first.
+          - task: TerraformInstaller@1
+            displayName: 'Install Terraform'
+            inputs:
+              terraformVersion: 'latest'   # Tip: pin to '1.x.x' for stability
+
+          # ── STEP 2: terraform init ──────────────────────────────────
+          # Downloads the azurerm provider plugin and connects to the
+          # Azure Storage remote backend where tfstate is stored.
+          #
+          # How auth works with Managed Identity:
+          #   "backendServiceArm" tells the task which service connection to use.
+          #   The task calls that service connection, which talks to the VMSS
+          #   Managed Identity endpoint to get an access token.
+          #   Terraform then uses that token — no password needed anywhere.
+          #
+          # ACTION REQUIRED: Replace 'YOUR-SERVICE-CONNECTION-NAME' with the
+          # name from: Azure DevOps → Project Settings → Service connections
+          - task: TerraformTaskV4@4
+            displayName: 'terraform init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(TF_WORKING_DIR)'
+              backendServiceArm: 'YOUR-SERVICE-CONNECTION-NAME'
+              backendAzureRmResourceGroupName: 'tf-backend-rg'
+              backendAzureRmStorageAccountName: 'tfstatedemo8754952'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'vnet/terraform.tfstate'
+
+          # ── STEP 3: terraform validate ──────────────────────────────
+          # Checks .tf files for syntax errors and configuration issues.
+          # Runs entirely locally — no Azure calls, no service connection needed.
+          - task: TerraformTaskV4@4
+            displayName: 'terraform validate'
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: '$(TF_WORKING_DIR)'
+
+          # ── STEP 4: terraform plan ──────────────────────────────────
+          # Reads current tfstate from the backend and queries Azure to
+          # compute exactly what changes WOULD be made if you applied.
+          # Nothing is changed. Output is a diff: + add, ~ modify, - destroy.
+          #
+          # "-out=tfplan" saves the computed plan to a file.
+          # WHY: The Apply stage will use this exact file, not re-run a plan.
+          # This guarantees: what you reviewed = what gets applied. No surprises.
+          #
+          # "environmentServiceNameAzureRM" = service connection used for
+          # reading from Azure during the plan (same MI connection as init).
+          - task: TerraformTaskV4@4
+            displayName: 'terraform plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(TF_WORKING_DIR)'
+              commandOptions: '-out=$(TF_WORKING_DIR)/tfplan'
+              environmentServiceNameAzureRM: 'YOUR-SERVICE-CONNECTION-NAME'
+
+          # ── STEP 5: Publish plan file as artifact ───────────────────
+          # Each stage runs on a separate agent machine. Files on machine A
+          # do not exist on machine B. To transfer the tfplan file from
+          # this Plan stage to the Apply stage, we upload it to ADO as a
+          # "pipeline artifact" — a file stored in ADO attached to this run.
+          - task: PublishPipelineArtifact@1
+            displayName: 'Upload tfplan as artifact'
+            inputs:
+              targetPath: '$(TF_WORKING_DIR)/tfplan'   # File to upload
+              artifactName: 'tfplan'                    # Name for the artifact
+              publishLocation: 'pipeline'
+
+# ── STAGE 2: APPLY ───────────────────────────────────────────
+# Purpose : Apply the saved plan — make real changes in Azure.
+# Safety  : Requires MANUAL APPROVAL before executing.
+# Runs on : Pushes to main ONLY. PRs are excluded (see condition).
+  - stage: Apply
+    displayName: 'Terraform Apply'
+
+    # This stage only starts AFTER Stage 1 "Plan" fully succeeds.
+    dependsOn: Plan
+
+    # Condition: run this stage ONLY IF both are true:
+    #   1. The Plan stage succeeded
+    #   2. We are on the main branch (not a PR — PRs use 'refs/pull/...' branch refs)
+    # This prevents terraform apply from running on unmerged PR code.
+    condition: |
+      and(
+        succeeded('Plan'),
+        eq(variables['Build.SourceBranch'], 'refs/heads/main')
+      )
+
+    jobs:
+
+      # "deployment" job (not regular "job") — this special type links to an
+      # ADO Environment. Environments support approval gates.
+      # When this job starts, ADO PAUSES and sends an approval notification.
+      # A human must click "Approve" in the ADO UI before steps execute.
+      #
+      # ACTION REQUIRED: Create an Environment named "production" in ADO:
+      #   Azure DevOps → Pipelines → Environments → New environment
+      #   Name: production → then click it → Approvals and checks → + → Approvals
+      #   Add your email as approver.
+      - deployment: TerraformApply
+        displayName: 'Apply Terraform Plan'
+        environment: 'production'   # Must match your Environment name exactly
+
+        # strategy + runOnce + deploy is required boilerplate for deployment jobs.
+        # It means: run these steps once (not rolling, not canary).
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                # ── STEP 1: Checkout code ─────────────────────────────
+                # "deployment" jobs do NOT auto-checkout the repo.
+                # (Regular jobs do by default, deployment jobs don't.)
+                # We need the .tf files on this agent, so checkout manually.
+                - checkout: self
+
+                # ── STEP 2: Install Terraform ─────────────────────────
+                # Fresh machine again — install Terraform before any commands.
+                - task: TerraformInstaller@1
+                  displayName: 'Install Terraform'
+                  inputs:
+                    terraformVersion: 'latest'
+
+                # ── STEP 3: Download the plan artifact ────────────────
+                # Fetch the tfplan file that Step 5 of Plan stage uploaded.
+                # "targetPath" is where the file lands on this machine.
+                - task: DownloadPipelineArtifact@2
+                  displayName: 'Download tfplan artifact'
+                  inputs:
+                    artifactName: 'tfplan'
+                    targetPath: '$(System.DefaultWorkingDirectory)'
+
+                # ── STEP 4: terraform init ────────────────────────────
+                # Must run init on this agent before apply.
+                # Same inputs as Plan stage init — reconnects to backend,
+                # downloads providers on this machine.
+                - task: TerraformTaskV4@4
+                  displayName: 'terraform init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)'
+                    backendServiceArm: 'YOUR-SERVICE-CONNECTION-NAME'
+                    backendAzureRmResourceGroupName: 'tf-backend-rg'
+                    backendAzureRmStorageAccountName: 'tfstatedemo8754952'
+                    backendAzureRmContainerName: 'tfstate'
+                    backendAzureRmKey: 'vnet/terraform.tfstate'
+
+                # ── STEP 5: terraform apply ───────────────────────────
+                # Applies the SAVED plan file — not a freshly computed plan.
+                # "commandOptions" passes the tfplan file as the argument.
+                # Terraform sees a plan file and executes exactly those changes.
+                # No "-auto-approve" flag needed — the plan file bypasses
+                # the interactive yes/no prompt by design.
+                - task: TerraformTaskV4@4
+                  displayName: 'terraform apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)'
+                    commandOptions: '$(System.DefaultWorkingDirectory)/tfplan'
+                    environmentServiceNameAzureRM: 'YOUR-SERVICE-CONNECTION-NAME'
