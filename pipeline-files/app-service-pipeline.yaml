@@ -47,6 +47,13 @@ stages:
         inlineScript: |
           terraform init
           terraform plan -out=tfplan
+      env:
+        TF_VAR_subscription_id: $(TF_VAR_subscription_id)
+        TF_VAR_resource_group_name: $(TF_VAR_resource_group_name)
+        TF_VAR_location: $(TF_VAR_location)
+        TF_VAR_os_type: $(TF_VAR_os_type)
+        TF_VAR_sku_name: $(TF_VAR_sku_name)
+        TF_VAR_tags: $(TF_VAR_tags)
 
     - publish: $(System.DefaultWorkingDirectory)/app-service/tfplan
       artifact: terraformPlan
@@ -105,3 +112,10 @@ stages:
                 inlineScript: |
                   terraform init
                   terraform apply tfplan
+              env:
+                TF_VAR_subscription_id: $(TF_VAR_subscription_id)
+                TF_VAR_resource_group_name: $(TF_VAR_resource_group_name)
+                TF_VAR_location: $(TF_VAR_location)
+                TF_VAR_os_type: $(TF_VAR_os_type)
+                TF_VAR_sku_name: $(TF_VAR_sku_name)
+                TF_VAR_tags: $(TF_VAR_tags)
