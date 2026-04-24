@@ -1,0 +1,107 @@
+trigger:
+- main
+
+pool:
+  name: 'sh-tf-agent-pool'
+
+stages:
+
+# -------------------------
+# Stage 1: Terraform Plan
+# -------------------------
+- stage: plan
+  displayName: 'Terraform Plan'
+  jobs:
+  - job: terraform_plan
+    displayName: 'Terraform Plan Job'
+    steps:
+
+    - checkout: self
+
+    - script: |
+        pwd
+        ls -al
+      displayName: 'Show workspace'
+
+    - script: |
+        sudo apt-get update
+        sudo apt-get install -y unzip
+      displayName: 'Install Unzip'
+
+    - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
+      displayName: 'Terraform Task'
+      inputs:
+        terraformVersion: '1.14.3'
+
+    - script: |
+        curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+      displayName: 'Install Azure CLI'
+
+    - task: AzureCLI@2
+      displayName: 'Login to Azure and run Terraform'
+      inputs:
+        azureSubscription: 'bicep-deployment-test-access'
+        scriptType: bash
+        scriptLocation: inlineScript
+        workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
+        inlineScript: |
+          terraform init
+          terraform plan -out=tfplan
+
+    - publish: $(System.DefaultWorkingDirectory)/app-service/tfplan
+      artifact: terraformPlan
+
+# -------------------------
+# Stage 2: Terraform Apply
+# -------------------------
+- stage: apply
+  displayName: 'Terraform Apply'
+  dependsOn: plan
+
+  jobs:
+  - deployment: terraform_apply
+    displayName: 'Terraform Apply Job'
+    environment: production
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+
+            - checkout: self
+
+            - download: current
+              artifact: terraformPlan
+
+            - script: |
+                pwd
+                ls -al
+              displayName: 'Show workspace'
+
+            - script: |
+                sudo apt-get update
+                sudo apt-get install -y unzip
+              displayName: 'Install Unzip'
+
+            - task: ms-devlabs.custom-terraform-tasks.custom-terraform-installer-task.TerraformInstaller@1
+              displayName: 'Terraform Task'
+              inputs:
+                terraformVersion: '1.14.3'
+
+            - script: |
+                curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+              displayName: 'Install Azure CLI'
+
+            - script: |
+                cp $(Pipeline.Workspace)/terraformPlan/tfplan $(System.DefaultWorkingDirectory)/app-service/
+              displayName: 'Move tfplan to working directory'
+
+            - task: AzureCLI@2
+              displayName: 'Login to Azure and run Terraform'
+              inputs:
+                azureSubscription: 'bicep-deployment-test-access'
+                scriptType: bash
+                scriptLocation: inlineScript
+                workingDirectory: '$(System.DefaultWorkingDirectory)/app-service'
+                inlineScript: |
+                  terraform init
+                  terraform apply tfplan

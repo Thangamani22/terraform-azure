@@ -1,5 +1,5 @@
 module "vnet" {
-  source = "./modules/vnet"
+  source = "../modules/vnet"
 
   resource_prefix = var.resource_prefix
   region        = var.region
