@@ -49,6 +49,7 @@ stages:
           terraform plan -out=tfplan
       env:
         TF_VAR_subscription_id: $(TF_VAR_subscription_id)
+        TF_VAR_create_resource_group: $(TF_VAR_create_resource_group)
         TF_VAR_resource_group_name: $(TF_VAR_resource_group_name)
         TF_VAR_location: $(TF_VAR_location)
         TF_VAR_os_type: $(TF_VAR_os_type)
@@ -114,6 +115,7 @@ stages:
                   terraform apply tfplan
               env:
                 TF_VAR_subscription_id: $(TF_VAR_subscription_id)
+                TF_VAR_create_resource_group: $(TF_VAR_create_resource_group)
                 TF_VAR_resource_group_name: $(TF_VAR_resource_group_name)
                 TF_VAR_location: $(TF_VAR_location)
                 TF_VAR_os_type: $(TF_VAR_os_type)
