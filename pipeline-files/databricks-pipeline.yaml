@@ -4,6 +4,15 @@ trigger:
 pool:
   name: 'sh-tf-agent-pool'
 
+variables:
+  # Variable group defined in Azure DevOps -> Pipelines -> Library.
+  # Must contain one variable per input declared in databricks/variables.tf.
+  # Map/object values (spark_conf, tags) must be stored as JSON strings,
+  # e.g. spark_conf = {"spark.databricks.delta.preview.enabled":"true"}
+  - group: databricks-tfvars
+  - name: tfWorkingDirectory
+    value: '$(System.DefaultWorkingDirectory)/databricks'
+
 stages:
 
 # -------------------------
@@ -38,16 +47,36 @@ stages:
       displayName: 'Install Azure CLI'
 
     - task: AzureCLI@2
-      displayName: 'Login to Azure and run Terraform'
+      displayName: 'Login to Azure and run Terraform Plan'
       inputs:
         azureSubscription: 'bicep-deployment-test-access'
         scriptType: bash
         scriptLocation: inlineScript
+        workingDirectory: $(tfWorkingDirectory)
         inlineScript: |
           terraform init
           terraform plan -out=tfplan
-        
-    - publish: tfplan
+      env:
+        # Map variable-group values to TF_VAR_* env vars consumed by Terraform.
+        TF_VAR_subscription_id: $(subscription_id)
+        TF_VAR_location: $(location)
+        TF_VAR_resource_group_name: $(resource_group_name)
+        TF_VAR_create_resource_group: $(create_resource_group)
+        TF_VAR_workspace_name: $(workspace_name)
+        TF_VAR_sku: $(sku)
+        TF_VAR_managed_resource_group_name: $(managed_resource_group_name)
+        TF_VAR_cluster_name: $(cluster_name)
+        TF_VAR_spark_version: $(spark_version)
+        TF_VAR_node_type_id: $(node_type_id)
+        TF_VAR_autotermination_minutes: $(autotermination_minutes)
+        TF_VAR_enable_autoscale: $(enable_autoscale)
+        TF_VAR_min_workers: $(min_workers)
+        TF_VAR_max_workers: $(max_workers)
+        TF_VAR_num_workers: $(num_workers)
+        TF_VAR_spark_conf: $(spark_conf)
+        TF_VAR_tags: $(tags)
+
+    - publish: $(tfWorkingDirectory)/tfplan
       artifact: terraformPlan
 
 # -------------------------
@@ -91,16 +120,35 @@ stages:
               displayName: 'Install Azure CLI'
 
             - script: |
-                cp $(Pipeline.Workspace)/terraformPlan/tfplan .
+                cp $(Pipeline.Workspace)/terraformPlan/tfplan $(tfWorkingDirectory)/tfplan
               displayName: 'Move tfplan to working directory'
 
             - task: AzureCLI@2
-              displayName: 'Login to Azure and run Terraform'
+              displayName: 'Login to Azure and run Terraform Apply'
               inputs:
                 azureSubscription: 'bicep-deployment-test-access'
                 scriptType: bash
                 scriptLocation: inlineScript
+                workingDirectory: $(tfWorkingDirectory)
                 inlineScript: |
                   terraform init
                   terraform apply tfplan
+              env:
+                TF_VAR_subscription_id: $(subscription_id)
+                TF_VAR_location: $(location)
+                TF_VAR_resource_group_name: $(resource_group_name)
+                TF_VAR_create_resource_group: $(create_resource_group)
+                TF_VAR_workspace_name: $(workspace_name)
+                TF_VAR_sku: $(sku)
+                TF_VAR_managed_resource_group_name: $(managed_resource_group_name)
+                TF_VAR_cluster_name: $(cluster_name)
+                TF_VAR_spark_version: $(spark_version)
+                TF_VAR_node_type_id: $(node_type_id)
+                TF_VAR_autotermination_minutes: $(autotermination_minutes)
+                TF_VAR_enable_autoscale: $(enable_autoscale)
+                TF_VAR_min_workers: $(min_workers)
+                TF_VAR_max_workers: $(max_workers)
+                TF_VAR_num_workers: $(num_workers)
+                TF_VAR_spark_conf: $(spark_conf)
+                TF_VAR_tags: $(tags)
 
