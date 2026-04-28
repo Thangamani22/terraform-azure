@@ -1,5 +1,11 @@
 trigger:
-- main
+  branches:
+    include:
+    - main
+  paths:
+    include:
+    - databricks/**
+    - pipeline-files/databricks-pipeline.yaml
 
 pool:
   name: 'sh-tf-agent-pool'
