@@ -21,7 +21,10 @@ resource "azurerm_linux_web_app" "web_app" {
   service_plan_id     = azurerm_service_plan.app_service_plan.id
   tags                = var.tags
   site_config {
-
+    application_stack {
+      python_version = var.python_version
+    }
   }
 }
+
 

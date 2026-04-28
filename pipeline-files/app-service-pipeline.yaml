@@ -1,5 +1,10 @@
 trigger:
-- main
+  branches:
+    include:
+    - main
+  path:
+    include:
+    - app-service/**
 
 pool:
   name: 'sh-tf-agent-pool'
@@ -55,6 +60,7 @@ stages:
         TF_VAR_os_type: $(TF_VAR_os_type)
         TF_VAR_sku_name: $(TF_VAR_sku_name)
         TF_VAR_tags: $(TF_VAR_tags)
+        TF_VAR_python_version: $(TF_VAR_python_version)
 
     - publish: $(System.DefaultWorkingDirectory)/app-service/tfplan
       artifact: terraformPlan
@@ -121,3 +127,4 @@ stages:
                 TF_VAR_os_type: $(TF_VAR_os_type)
                 TF_VAR_sku_name: $(TF_VAR_sku_name)
                 TF_VAR_tags: $(TF_VAR_tags)
+                TF_VAR_python_version: $(TF_VAR_python_version)

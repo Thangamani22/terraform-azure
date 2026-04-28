@@ -37,3 +37,8 @@ variable "sku_name" {
   type        = string
   default     = "P1v2"
 }
+variable "python_version" {
+  description = "Python version for the App Service"
+  type        = string
+  default     = "3.14"
+}

@@ -7,5 +7,5 @@ module "web-app" {
   os_type               = var.os_type
   sku_name              = var.sku_name
   tags                  = var.tags
-
+  python_version        = var.python_version
 }
